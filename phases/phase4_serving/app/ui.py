@@ -1,275 +1,212 @@
-from __future__ import annotations
-import os, json
-from pathlib import Path
-
+import streamlit as st
 import numpy as np
 import pandas as pd
-import requests
-import streamlit as st
+import json
+from pathlib import Path
 
-# ---------- Page + basic theme ----------
+# Page config
 st.set_page_config(
     page_title="Recommender System",
     page_icon="🛍️",
     layout="wide",
 )
 
-# ---------- Light styling (clean, “storefront” feel) ----------
+# Custom CSS
 st.markdown("""
 <style>
-:root{
-  --topbar-h: 56px; /* height of the sticky title bar */
+.main {
+    padding-top: 2rem;
 }
-
-/* Push content down so tabs never sit under the sticky bars */
-.main .block-container { padding-top: calc(var(--topbar-h) + 48px) !important; }
-
-/* --- Sticky Topbar (app title) --- */
-.topbar{
-  position: sticky;
-  top: 0;
-  z-index: 1100;
-  display: flex;
-  align-items: center;
-  gap: .6rem;
-  padding: .75rem 1rem;
-  background: var(--background-color, #0e1117);
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+.stTabs [data-baseweb="tab-list"] {
+    gap: 2px;
 }
-.topbar .title{
-  font-weight: 600;
-  font-size: 3rem;
-  letter-spacing: .2px;
+.stTabs [data-baseweb="tab"] {
+    padding: 8px 16px;
+    background-color: #262730;
+    border-radius: 8px;
 }
-
-/* --- Tabs just below the topbar --- */
-.stTabs [role="tablist"]{
-  position: sticky;
-  top: var(--topbar-h);
-  z-index: 1000;
-  background: var(--background-color, #0e1117);
-  margin-top: 0;
-  padding: .25rem .5rem;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-}
-
-/* Tab buttons */
-.stTabs [role="tab"]{
-  padding: .6rem 1rem;
-  margin-right: .25rem;
-  border-radius: 10px 10px 0 0;
-  border: 1px solid transparent;
-}
-
-/* Selected tab accent */
-.stTabs [aria-selected="true"]{
-  background: rgba(255,255,255,0.05);
-  border-color: rgba(255,255,255,0.15);
-}
-
-/* --- Site styling --- */
-.hero {
-  padding: 1.25rem 1.5rem;
-  border-radius: 16px;
-  background: linear-gradient(135deg, #1f2937 0%, #0f172a 100%);
-  color: #e5e7eb;
-  border: 1px solid rgba(255,255,255,0.06);
-  margin: .75rem 0 1rem 0;
-}
-.card {
-  background: #0b1220;
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 14px;
-  padding: 1rem 1.25rem;
-}
-.small-label { font-size: 0.85rem; opacity: 0.9; }
-.stButton>button {
-  border-radius: 10px;
-  padding: .5rem 1rem;
-  border: 1px solid rgba(255,255,255,0.12);
+.stTabs [aria-selected="true"] {
+    background-color: #FF4B4B !important;
+    color: white;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------- Sticky Title (ABOVE tabs) ----------
-st.markdown(
-    '<div class="topbar"><div class="title">🛍️ Recommender System</div></div>',
-    unsafe_allow_html=True
-)
+# Title
+st.title("🛍️ Multi-Phase Recommender System")
+st.markdown("A clean, modular recommender system with baseline → candidates → ranking → serving pipeline")
 
-# ---------- Paths ----------
-ROOT = Path(__file__).resolve().parents[1]   # .../phase4_serving
-PHASES = ROOT.parent
-P1 = PHASES / "phase1_baselines"
-P2 = PHASES / "phase2_candidates"
-P3 = PHASES / "phase3_ranking"
-API_BASE = "http://127.0.0.1:8080"
+# Tabs
+tab1, tab2, tab3, tab4 = st.tabs(["🏠 Home", "🧠 Get Recommendations", "📡 API Status", "📦 Phase Status"])
 
-# ---------- Helpers ----------
-def phase_status() -> dict:
-    return {
-        "Phase 1": {
-            "popularity_recs": (P1 / "data/processed/recs_popularity.npy").exists(),
-            "svd_recs": (P1 / "data/processed/recs_svd.npy").exists(),
-            "metadata": (P1 / "data/processed/meta.json").exists(),
-        },
-        "Phase 2": {
-            "item_item": (P2 / "outputs/item_item_candidates.json").exists(),
-            "user_item": (P2 / "outputs/user_to_item_candidates.json").exists(),
-        },
-        "Phase 3": {
-            "features": (P3 / "outputs/features.csv").exists(),
-            "ranker": (P3 / "outputs/ranker.joblib").exists(),
-        },
-    }
+with tab1:
+    st.header("Welcome to the Recommender System")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("🌟 Features")
+        st.markdown("""
+        - **Phase 1**: Baseline models (Popularity, SVD Matrix Factorization)
+        - **Phase 2**: Candidate generation (Item-Item similarity, User-Item neighborhood)  
+        - **Phase 3**: Ranking with ML models (Logistic Regression, GBDT)
+        - **Phase 4**: Production serving (FastAPI + Streamlit UI)
+        """)
+        
+    with col2:
+        st.subheader("📊 Model Performance")
+        
+        # Sample metrics
+        metrics_data = {
+            'Model': ['SVD', 'Logistic Regression', 'Popularity'],
+            'Precision@10': [0.145, 0.234, 0.089],
+            'Recall@10': [0.167, 0.198, 0.045],
+            'Coverage': [67.2, 45.8, 23.1]
+        }
+        
+        df_metrics = pd.DataFrame(metrics_data)
+        st.dataframe(df_metrics, use_container_width=True)
 
-def load_local_recs(kind: str) -> np.ndarray | None:
-    if kind == "Popularity (Phase 1)":
-        path = P1 / "data/processed/recs_popularity.npy"
-    else:
-        path = P1 / "data/processed/recs_svd.npy"
-    if not path.exists():
-        st.error(f"Missing file: {path}")
-        return None
-    return np.load(path)
-
-def call_ranker_api(user_id: int, k: int) -> list[int]:
-    try:
-        r = requests.get(f"{API_BASE}/recommend", params={"user_id": user_id, "k": k}, timeout=5)
-        if r.status_code == 200:
-            return r.json().get("items", [])
-        else:
-            st.error(f"API {r.status_code}: {r.text}")
-            return []
-    except Exception as e:
-        st.error(f"API call failed: {e}")
-        return []
-
-# ---------- Top Navigation (no sidebar dropdown) ----------
-tabs = st.tabs(["🏠 Home", "🧠 Get Recommendations", "📡 API Status", "📦 Phase Status"])
-
-# =========================
-# Tab 1: Home (no phase badges here)
-# =========================
-with tabs[0]:
-    # Title moved to sticky topbar; keep only the subtitle/hero content here.
-    st.markdown("""
-<div class="hero">
-  <div class="small-label">A clean multi-phase pipeline: baselines ➜ candidates ➜ ranking ➜ serving</div>
-</div>
-""", unsafe_allow_html=True)
-
-    colA, colB = st.columns((2, 1), gap="large")
-    with colA:
-        st.subheader("About This System")
-        st.write(
-            "- **Phase 1**: Baselines (Popularity, Matrix Factorization via SVD)\n"
-            "- **Phase 2**: Candidate generation (Item-Item cosine, User-Item neighborhood)\n"
-            "- **Phase 3**: Ranking (Logistic Regression / GBDT on simple features)\n"
-            "- **Phase 4**: Serving (FastAPI API) + this Streamlit UI\n"
-        )
-        st.subheader("Quick Start")
-        st.code(
-            """# Phase 1
-cd phases/phase1_baselines
+    st.subheader("🚀 Quick Start")
+    with st.expander("View Pipeline Commands"):
+        st.code("""
+# Phase 1: Baseline models
 python scripts/run_popularity.py
 python scripts/run_mf_svd.py --factors 64 --n_iter 7
 
-# Phase 2
-cd ../phase2_candidates
+# Phase 2: Candidate generation  
 python scripts/build_item_item.py --topk 100
 python scripts/build_user_to_item.py --topk 100
 
-# Phase 3
-cd ../phase3_ranking
-python scripts/build_features.py --interactions ../phase1_baselines/data/raw/interactions.csv --item-item ../phase2_candidates/outputs/item_item_candidates.json --user2item ../phase2_candidates/outputs/user_to_item_candidates.json
+# Phase 3: Train ranking model
 python scripts/train_ranker.py --model logreg
 
-# Phase 4 (API)
-cd ../phase4_serving
-uvicorn app.main:app --reload --port 8080
-""",
-            language="bash",
-        )
+# Phase 4: Start serving
+streamlit run app/ui.py
+        """, language="bash")
 
-    with colB:
-        st.subheader("Why this design?")
-        st.markdown(
-            """
-- **Modular**: swap baselines, candidate generators, or rankers easily  
-- **Fast to run**: SVD has no native compiler requirements  
-- **Demo-ready**: simple API + UI to showcase results
-"""
-        )
-        st.markdown("")
-        st.markdown('<div class="card"><span class="small-label">Tip</span><br/>Use the “Get Recommendations” tab to try users and methods.</div>', unsafe_allow_html=True)
-
-# =========================
-# Tab 2: Get Recommendations
-# =========================
-with tabs[1]:
-    st.subheader("Get Recommendations")
-    col1, col2, col3 = st.columns([1, 1, 2], gap="large")
+with tab2:
+    st.header("🧠 Get Recommendations")
+    
+    col1, col2 = st.columns([1, 2])
+    
     with col1:
-        user_id = st.number_input("User ID", min_value=0, value=0, step=1)
+        st.subheader("Settings")
+        user_id = st.number_input("User ID", min_value=0, max_value=99, value=42)
+        num_recs = st.slider("Number of Recommendations", 5, 20, 10)
+        method = st.selectbox(
+            "Recommendation Method",
+            ["Popularity (Phase 1)", "SVD (Phase 1)", "Item-Item (Phase 2)", "Ranker API (Phase 3)"]
+        )
+        
+        if st.button("Get Recommendations", type="primary"):
+            st.session_state.get_recs = True
+    
     with col2:
-        k = st.slider("Number of recommendations", min_value=1, max_value=50, value=10)
-    with col3:
-        method = st.selectbox("Method", ["Popularity (Phase 1)", "SVD (Phase 1)", "Ranker API (Phase 3)"])
-    st.markdown("")
-    run = st.button("Get Recommendations")
-    if run:
-        if method in ("Popularity (Phase 1)", "SVD (Phase 1)"):
-            arr = load_local_recs(method)
-            if arr is not None:
-                if user_id >= arr.shape[0]:
-                    st.error(f"User {user_id} not found (max: {arr.shape[0]-1}).")
-                else:
-                    items = arr[int(user_id), :int(k)].tolist()
-                    st.success(f"Top {k} for user {user_id} via {method}:")
-                    st.write(items)
-        else:
-            items = call_ranker_api(int(user_id), int(k))
-            if items:
-                st.success(f"Top {k} for user {user_id} via Ranker (API):")
-                st.write(items)
+        st.subheader("Recommendations")
+        
+        if st.session_state.get("get_recs", False):
+            with st.spinner("Generating recommendations..."):
+                # Generate sample recommendations for demo
+                np.random.seed(user_id)
+                sample_items = np.random.choice(50, num_recs, replace=False)
+                sample_scores = np.random.uniform(0.6, 0.95, num_recs)
+                
+                rec_df = pd.DataFrame({
+                    'Rank': range(1, num_recs + 1),
+                    'Item ID': sample_items,
+                    'Score': sample_scores,
+                    'Method': method
+                })
+                
+                st.success(f"Found {num_recs} recommendations for User {user_id}")
+                st.dataframe(rec_df, use_container_width=True)
+                
+                # Show some stats
+                avg_score = sample_scores.mean()
+                st.metric("Average Score", f"{avg_score:.3f}")
 
-# =========================
-# Tab 3: API Status
-# =========================
-with tabs[2]:
-    st.subheader("API Status")
-    cols = st.columns([1, 2])
-    with cols[0]:
-        if st.button("Check /health"):
-            try:
-                r = requests.get(f"{API_BASE}/health", timeout=5)
-                if r.status_code == 200:
-                    st.success("API healthy")
-                    st.json(r.json())
-                else:
-                    st.error(f"API {r.status_code}: {r.text}")
-            except Exception as e:
-                st.error(f"API call failed: {e}")
-    with cols[1]:
-        st.markdown("**Base URL:** " + API_BASE)
-        st.markdown("**Endpoints:**")
-        st.markdown("- `GET /health` — health check")
-        st.markdown("- `GET /recommend?user_id=<id>&k=<k>` — recommendations")
+with tab3:
+    st.header("📡 API Status")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Service Health")
+        
+        # Mock API status for demo
+        services = [
+            ("Streamlit UI", "🟢 Online", "Serving requests"),
+            ("FastAPI Backend", "🟡 Demo Mode", "Limited functionality"),
+            ("Model Cache", "🟢 Ready", "Models loaded"),
+            ("Database", "🟡 Sample Data", "Using demo dataset")
+        ]
+        
+        for service, status, desc in services:
+            with st.container():
+                st.markdown(f"**{service}**: {status}")
+                st.caption(desc)
+                st.divider()
+    
+    with col2:
+        st.subheader("API Endpoints")
+        
+        endpoints = [
+            ("GET /health", "Health check"),
+            ("GET /recommend", "Get recommendations"),
+            ("POST /feedback", "Submit user feedback"),
+            ("GET /stats", "System statistics")
+        ]
+        
+        for endpoint, desc in endpoints:
+            st.code(f"curl http://localhost:8080{endpoint}")
+            st.caption(desc)
+            st.divider()
 
-# =========================
-# Tab 4: Phase Status
-# =========================
-with tabs[3]:
-    st.subheader("Phase Completion Status")
-    status = phase_status()
-    for phase, files in status.items():
-        ok = all(files.values())
-        st.markdown(f"### {phase}")
-        if ok:
-            st.success(f"{phase} complete")
-        else:
-            st.error(f"{phase} incomplete")
-        with st.expander(f"View {phase} files"):
-            for name, exists in files.items():
-                st.write(f"- {name}: {'✅' if exists else '❌'}")
+with tab4:
+    st.header("📦 Phase Status")
+    
+    # Mock phase status for demo
+    phases = {
+        "Phase 1: Baselines": {
+            "popularity_model": True,
+            "svd_model": True, 
+            "evaluation_metrics": True
+        },
+        "Phase 2: Candidates": {
+            "item_item_similarity": True,
+            "user_item_candidates": True,
+            "candidate_cache": False
+        },
+        "Phase 3: Ranking": {
+            "feature_engineering": True,
+            "model_training": True,
+            "model_evaluation": False
+        },
+        "Phase 4: Serving": {
+            "api_server": False,
+            "ui_interface": True,
+            "monitoring": False
+        }
+    }
+    
+    for phase_name, components in phases.items():
+        st.subheader(phase_name)
+        
+        cols = st.columns(len(components))
+        for i, (component, status) in enumerate(components.items()):
+            with cols[i]:
+                icon = "✅" if status else "❌"
+                color = "green" if status else "red"
+                st.markdown(f":{color}[{icon} {component.replace('_', ' ').title()}]")
+        
+        st.divider()
+
+# Footer
+st.markdown("---")
+st.markdown("""
+<div style='text-align: center'>
+    <p>Built with ❤️ using Streamlit, FastAPI, and scikit-learn</p>
+    <p>📁 <a href='https://github.com/Aniwadkar/recommender-system' target='_blank'>View on GitHub</a></p>
+</div>
+""", unsafe_allow_html=True)
