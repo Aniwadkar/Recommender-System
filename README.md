@@ -6,6 +6,10 @@ A clean, modular recommender system built with a multi-phase pipeline: baselines
 ![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)
 ![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
 
+
+## 🚀 Live Demo
+Try the app: https://recommender-system-w7rinjxxwd8dznfbsemplu.streamlit.app/
+
 ## 🌟 Features
 
 - **Phase 1**: Baseline models (Popularity, SVD Matrix Factorization)
@@ -268,3 +272,6 @@ For questions and support:
 ---
 
 **Built with ❤️ using Streamlit, FastAPI, and scikit-learn**
+
+## 🚀 Live Demo
+Try the app: https://recommender-system-w7rinjxxwd8dznfbsemplu.streamlit.app/
